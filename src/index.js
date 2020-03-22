@@ -9,6 +9,8 @@ var argv = require('yargs').argv;
 var rev = require("./detectRev");
 var constants = require("./constants");
 var configs = require("../bot");
+const linkPreviewGenerator = require("link-preview-generator");
+const image2base64 = require('image-to-base64');
 
 //console.log(ps);
 
@@ -23,9 +25,6 @@ async function Main() {
         var isLogin = await checkLogin();
         if (!isLogin) {
             await getAndShowQR();
-        }
-        if (configs.smartreply.suggestions.length >= 0) {
-            await setupSmartReply();
         }
         console.log("WBOT is ready !! Let those message come.");
     } catch (e) {
@@ -112,6 +111,32 @@ async function Main() {
     async function injectScripts(page) {
         return await page.waitForSelector('[data-icon=laptop]')
             .then(async () => {
+                await page.addScriptTag({
+                    content: `
+                var previewData = ${JSON.stringify({
+                    text: configs.bot.message.text
+                })}
+            `});
+
+                try {
+                    if (configs.bot.message.link) {
+                        const previewData = await linkPreviewGenerator(configs.bot.message.link);
+                        if (previewData.img) {
+                            var imgbase64 = await image2base64(previewData.img);
+                            previewData.thumb = imgbase64;
+                            previewData.url = configs.bot.message.link;
+                            previewData.text = configs.bot.message.text;
+                            await page.addScriptTag({
+                                content: `
+                            var previewData = ${JSON.stringify(previewData)}
+                        `});
+                        }
+                    }
+
+                } catch (error) {
+                    console.log("error getting preview data for link: " + configs.bot.message.link, error);
+
+                }
                 var filepath = path.join(__dirname, "WAPI.js");
                 await page.addScriptTag({ path: require.resolve(filepath) });
                 filepath = path.join(__dirname, "inject.js");
@@ -163,35 +188,6 @@ async function Main() {
         }
     }
 
-    async function setupSmartReply() {
-        spinner.start("setting up smart reply");
-        await page.waitForSelector(".app");
-        await page.evaluate(`
-            var observer = new MutationObserver((mutations) => {
-                for (var mutation of mutations) {
-                    //console.log(mutation);
-                    if (mutation.addedNodes.length && mutation.addedNodes[0].id === 'main') {
-                        //newChat(mutation.addedNodes[0].querySelector('.copyable-text span').innerText);
-                        console.log("%cChat changed !!", "font-size:x-large");
-                        WAPI.addOptions();
-                    }
-                }
-            });
-            observer.observe(document.querySelector('.app'), { attributes: false, childList: true, subtree: true });
-        `);
-        spinner.stop("setting up smart reply ... done!");
-        page.waitForSelector("#main", { timeout: 0 }).then(async () => {
-            await page.exposeFunction("sendMessage", async message => {
-                return new Promise(async (resolve, reject) => {
-                    //send message to the currently open chat using power of puppeteer 
-                    await page.type("div.selectable-text[data-tab]", message);
-                    if (configs.smartreply.clicktosend) {
-                        await page.click("#main > footer > div.copyable-area > div:nth-child(3) > button");
-                    }
-                });
-            });
-        });
-    }
 }
 
 Main();

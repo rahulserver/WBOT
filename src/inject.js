@@ -1,75 +1,66 @@
 WAPI.waitNewMessages(false, (data) => {
-    console.log(data)
-    data.forEach((message) => {
+    window.log(data)
+    const INTERVAL = intents.bot.interval; // 3000 ms;
+    for (var i = 0; i < data.length; i++) {
+        let message = data[i];
         //fetch API to send and receive response from server
         body = {};
         body.text = message.body;
         body.type = 'message';
         body.user = message.from._serialized;
-        //body.original = message;
-        fetch(intents.appconfig.webhook, {
-            method: "POST",
-            body: JSON.stringify(body),
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        }).then((resp) => resp.json()).then(function (response) {
-            //response received from server
-            console.log(response);
-            WAPI.sendSeen(message.from._serialized);
-            //replying to the user based on response
-            WAPI.sendMessage2(message.from._serialized, response[0].text);
-            //sending files if there is any 
-            if(response.files){
-                if (response.files.length > 0) {
-                    response.files.forEach((file) => {
-                        WAPI.sendImage(file.file, response.From, file.name);
-                    })
+
+        if (message.type == "chat" && message.sender.id == intents.bot.masterId) {
+
+            if (message.body == "send") {
+                window.log("message here " + JSON.stringify(message));
+                try {
+                    WAPI.sendSeen(message.from);
+                } catch (e) {
+                    window.log("error sendSeen", e);
+                    console.log("error sendSeen", e);
                 }
+                let recipients = intents.bot.recipients;
+                let promise = Promise.resolve();
+                recipients.reduce((previousPromise, curRecipient) => {
+                    return previousPromise.then(() => new Promise((resolve) => {
+                        if (previewData.url) {
+                            WAPI.sendMessageWithThumb(previewData.thumb,
+                                previewData.url, previewData.title, previewData.description, previewData.text, curRecipient);
+                            console.log();
+                        } else {
+                            WAPI.sendMessage2(curRecipient, previewData.text);
+                            console.log();
+                        }
+                        setTimeout(() => {
+                            resolve(1)
+                        }, INTERVAL);
+                    }))
+                }, Promise.resolve());
             }
-        }).catch(function (error) {
-            console.log(error);
-        });
-        window.log(`Message from ${message.from.user} checking..`);
-        if (intents.blocked.indexOf(message.from.user) >= 0) {
-            window.log("number is blocked by BOT. no reply");
-            return;
-        }
-        if (message.type == "chat") {
-            //message.isGroupMsg to check if this is a group
-            if (message.isGroupMsg == true && intents.appconfig.isGroupReply == false) {
-                window.log("Message received in group and group reply is off. so will not take any actions.");
-                return;
+
+            if (message.body == "echo") {
+                WAPI.sendSeen(message.from);
+                console.log();
+                WAPI.sendMessage2(intents.bot.echo, "chat id is " + message.chat.id);
+                console.log();
             }
-            var exactMatch = intents.bot.find(obj => obj.exact.find(ex => ex == message.body.toLowerCase()));
-            var response = "";
-            if (exactMatch != undefined) {
-                response = exactMatch.response;
-                window.log(`Replying with ${exactMatch.response}`);
-            } else {
-                response = intents.noMatch;
-                console.log("No exact match found");
-            }
-            var PartialMatch = intents.bot.find(obj => obj.contains.find(ex => message.body.toLowerCase().search(ex) > -1));
-            if (PartialMatch != undefined) {
-                response = PartialMatch.response;
-                window.log(`Replying with ${PartialMatch.response}`);
-            } else {
-                console.log("No partial match found");
-            }
-            WAPI.sendSeen(message.from._serialized);
-            WAPI.sendMessage2(message.from._serialized, response);
-            console.log();
-            if ((exactMatch || PartialMatch).file != undefined) {
-                window.getFile((exactMatch || PartialMatch).file).then((base64Data) => {
-                    //console.log(file);
-                    WAPI.sendImage(base64Data, message.from._serialized, (exactMatch || PartialMatch).file);
-                }).catch((error) => {
-                    window.log("Error in sending file\n" + error);
+
+            if (message.body == "listGroups") {
+                let chats = WAPI.getAllChats();
+                // filter out the groups
+                chats = chats.filter(it => it.isGroup);
+                window.log("chats1 " + JSON.stringify(chats));
+                chats = chats.map(it => {
+                    return {
+                        name: it.name,
+                        id: it.id
+                    }
                 })
+                window.log("chats2 " + JSON.stringify(chats));
+                WAPI.sendMessage2(intents.bot.echo, JSON.stringify(chats));
             }
         }
-    });
+    }
 });
 WAPI.addOptions = function () {
     var suggestions = "";

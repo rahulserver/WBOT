@@ -34,6 +34,8 @@
   "homepage": "https://github.com/vasani-arpit/WBOT#readme",
   "dependencies": {
     "cli-progress": "^2.1.1",
+    "image-to-base64": "^2.0.1",
+    "link-preview-generator": "0.0.3",
     "mime": "^2.4.4",
     "node-fetch": "^2.3.0",
     "ora": "^3.0.0",
